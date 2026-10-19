@@ -1,4 +1,4 @@
-ml-llm v7 — Raspberry Pi 400 build
+ml-llm v7 — macOS build
 
 Install:
   python3 -m venv .venv
@@ -15,4 +15,4 @@ Commands:
   ml-llm healthcheck
 
 Config defaults (src/ml_llm/config.py): 192 dim, 4 heads, 6 layers, 256 context, fp32, batch 6 x grad_accum 4.
-Sized for Pi 400 4GB CPU-only. Increase context/dim only after confirming RAM headroom with healthcheck.
+Increase context/dim only after confirming RAM headroom with healthcheck.
