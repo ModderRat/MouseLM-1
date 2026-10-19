@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import argparse
+import platform
+import sys
+
+import torch
+from rich.console import Console
+
+from ml_llm.chat.generate import reply
+from ml_llm.chat.memory import ChatMemory
+from ml_llm.config import Config
+from ml_llm.train.loop import build_tokenizer, latest_checkpoint, load_model, train, upload_to_huggingface, DEFAULT_HF_REPO_ID
+
+console = Console()
+
+
+def cmd_train(cfg: Config, args: argparse.Namespace) -> None:
+    train(cfg)
+
+
+def cmd_chat(cfg: Config, args: argparse.Namespace) -> None:
+    cfg.paths.ensure()
+    tokenizer = build_tokenizer(cfg)
+    model, step, _ = load_model(cfg, tokenizer)
+    if step == 0:
+        console.print("[red]No trained checkpoint found. Run 'ml-llm train' first.[/red]")
+        return
+    model.eval()
+    device = torch.device(cfg.train.device)
+    model.to(device)
+    memory = ChatMemory(cfg.paths.memory)
+
+    console.print(f"[green]Loaded checkpoint at step {step}. Type 'exit' to quit.[/green]")
+    while True:
+        try:
+            user_input = console.input("[bold cyan]you>[/bold cyan] ")
+        except (EOFError, KeyboardInterrupt):
+            break
+        if user_input.strip().lower() in {"exit", "quit"}:
+            break
+        text = reply(
+            model,
+            tokenizer,
+            memory,
+            user_input,
+            device,
+            temperature=args.temperature,
+            top_k=args.top_k,
+            repetition_penalty=args.repetition_penalty,
+        )
+        console.print(f"[bold magenta]assistant>[/bold magenta] {text}")
+
+
+def cmd_status(cfg: Config, args: argparse.Namespace) -> None:
+    ckpt = latest_checkpoint(cfg)
+    console.print(f"root: {cfg.paths.root}")
+    console.print(f"checkpoint: {ckpt.name if ckpt else 'none'}")
+    console.print(f"tokenizer: {'present' if cfg.paths.tokenizer.exists() else 'missing'}")
+
+
+def cmd_healthcheck(cfg: Config, args: argparse.Namespace) -> None:
+    console.print(f"python: {sys.version.split()[0]}")
+    console.print(f"platform: {platform.machine()} / {platform.system()}")
+    console.print(f"torch: {torch.__version__}")
+    console.print(f"threads: {torch.get_num_threads()}")
+    ckpt = latest_checkpoint(cfg)
+    if ckpt is not None:
+        state = torch.load(ckpt, map_location="cpu")
+        ok = state.get("finite", True)
+        color = "green" if ok else "red"
+        console.print(f"[{color}]latest checkpoint finite: {ok}[/{color}]")
+    else:
+        console.print("[yellow]no checkpoint found[/yellow]")
+
+
+def cmd_upload(cfg: Config, args: argparse.Namespace) -> None:
+    ckpt = latest_checkpoint(cfg)
+    if ckpt is None:
+        console.print("[red]No checkpoint found to upload.[/red]")
+        return
+    step = int(ckpt.stem.split("_")[-1])
+    repo_id = getattr(cfg.train, "hf_repo_id", DEFAULT_HF_REPO_ID)
+    upload_to_huggingface(cfg=cfg, checkpoint_path=ckpt, repo_id=repo_id, step=step)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="ml-llm")
+    sub = parser.add_subparsers(dest="command", required=True)
+    for name in ("train", "status", "healthcheck", "upload"):
+        sub.add_parser(name)
+
+    chat_parser = sub.add_parser("chat")
+    chat_parser.add_argument("--temperature", type=float, default=0.6)
+    chat_parser.add_argument("--top-k", type=int, default=40)
+    chat_parser.add_argument("--repetition-penalty", type=float, default=1.3)
+
+    args = parser.parse_args()
+    cfg = Config.default()
+
+    handlers = {
+        "train": cmd_train,
+        "chat": cmd_chat,
+        "status": cmd_status,
+        "healthcheck": cmd_healthcheck,
+        "upload": cmd_upload,
+    }
+    handlers[args.command](cfg, args)
+
+
+if __name__ == "__main__":
+    main()

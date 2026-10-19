@@ -1,0 +1,11 @@
+checkpoints/
+checkpoints_old/
+dataset_big/
+*.pt
+*.pth
+*.bin
+*.jsonl
+*.zip
+.DS_Store
+old/
+logs/

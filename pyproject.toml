@@ -1,0 +1,20 @@
+[project]
+name = "ml-llm"
+version = "7.0.0"
+description = "Tiny GPT trainer/chat tool for Raspberry Pi"
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.2",
+    "rich>=13.7",
+    "numpy>=1.26",
+]
+
+[project.scripts]
+ml-llm = "ml_llm.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
