@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 ml-llm v7 (MouseLM-1)
+=======
+ml-llm v7 — macOS build
+>>>>>>> ec97c23a749936183d772472a77460210dc863e3
 
 Install:
   python3 -m venv .venv
@@ -18,5 +22,10 @@ Commands:
   ml-llm status
   ml-llm healthcheck
 
+<<<<<<< HEAD
 Steps counted in train are optimizer updates (one per grad_accum micro-batches).
 Changing the tokenizer invalidates checkpoints: delete tokenizer.json, tokenizer.fingerprint, examples_cache.bin and the checkpoints folder to start fresh.
+=======
+Config defaults (src/ml_llm/config.py): 192 dim, 4 heads, 6 layers, 256 context, fp32, batch 6 x grad_accum 4.
+Increase context/dim only after confirming RAM headroom with healthcheck.
+>>>>>>> ec97c23a749936183d772472a77460210dc863e3
