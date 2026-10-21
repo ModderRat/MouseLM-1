@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass
+import os
+from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-DEFAULT_ROOT = Path.home() / "ml_llm_pi"
+DEFAULT_ROOT = Path(os.environ.get("ML_LLM_ROOT", str(Path.home() / "ml_llm_pi"))).expanduser()
 
 
 @dataclass
@@ -14,7 +15,7 @@ class ModelConfig:
     n_layers: int = 8
     context: int = 1024
     dropout: float = 0.1
-    vocab_size: int = 16384
+    vocab_size: int = 8192
     n_loops: int = 2
 
 
@@ -25,7 +26,7 @@ class TrainConfig:
     lr: float = 3e-4
     weight_decay: float = 0.01
     warmup_steps: int = 500
-    max_steps: int = 300000
+    max_steps: int = 100000
     grad_clip: float = 1.0
     eval_every: int = 500
     checkpoint_every: int = 500
@@ -56,11 +57,19 @@ class Config:
 
     @classmethod
     def default(cls) -> "Config":
-        return cls(
-            model=ModelConfig(),
-            train=TrainConfig(),
-            paths=Paths(),
-        )
+        paths = Paths()
+        model = ModelConfig()
+        overlay = paths.root / "config.json"
+        if overlay.is_file():
+            try:
+                data = json.loads(overlay.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                data = {}
+            data = data.get("model", data) if isinstance(data, dict) else {}
+            for f in fields(ModelConfig):
+                if f.name in data:
+                    setattr(model, f.name, data[f.name])
+        return cls(model=model, train=TrainConfig(), paths=paths)
 
     @classmethod
     def load(cls, path: Path) -> "Config":

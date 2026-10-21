@@ -21,11 +21,10 @@ from rich.progress import (
 from torch.utils.data import DataLoader, random_split
 
 from ml_llm.config import Config
-from ml_llm.data.dataset import ConversationDataset, load_conversations
 from ml_llm.data.streaming import build_examples_cache, sample_texts, MemmapConversationDataset
 from ml_llm.data.tokenizer import Tokenizer
 from ml_llm.model.architecture import TinyGPT
-from ml_llm.train.distributed import cleanup_distributed, init_distributed, is_distributed, wrap_model
+from ml_llm.train.distributed import init_distributed, is_distributed, wrap_model
 
 
 console = Console()
@@ -532,62 +531,46 @@ def dataset_fingerprint(dataset_dir: Path) -> str:
 
 def build_tokenizer(cfg: Config) -> Tokenizer:
     tok_path = cfg.paths.tokenizer
-    fp_path = tok_path.with_suffix(".fingerprint")
-
-    current_fp = dataset_fingerprint(
-        cfg.paths.dataset
-    )
-
-    if (
-        tok_path.exists()
-        and fp_path.exists()
-        and fp_path.read_text().strip()
-        == current_fp
-    ):
-        console.print(
-            "[green]Using existing tokenizer.[/green]"
-        )
-        return Tokenizer.load(tok_path)
 
     if tok_path.exists():
+        tok = Tokenizer.load(tok_path)
+        fp_path = tok_path.with_suffix(".fingerprint")
+        current_fp = dataset_fingerprint(cfg.paths.dataset)
+        if fp_path.exists() and fp_path.read_text().strip() != current_fp:
+            console.print(
+                "[yellow]Dataset files changed since the tokenizer was built. "
+                "Keeping the existing tokenizer so checkpoints stay valid. "
+                "Delete tokenizer.json, the checkpoints and examples_cache.bin "
+                "to rebuild from scratch.[/yellow]"
+            )
+        console.print("[green]Using existing tokenizer.[/green]")
+        return tok
+
+    if cfg.paths.checkpoints.exists() and any(
+        cfg.paths.checkpoints.glob("step_*.pt")
+    ):
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        stale = cfg.paths.checkpoints.with_name(
+            f"{cfg.paths.checkpoints.name}.stale_{stamp}"
+        )
+        cfg.paths.checkpoints.rename(stale)
         console.print(
-            "[yellow]"
-            "Dataset changed. Rebuilding tokenizer "
-            "and clearing incompatible checkpoints."
-            "[/yellow]"
+            f"[yellow]No tokenizer found. Existing checkpoints are incompatible "
+            f"and were moved to {stale}[/yellow]"
         )
 
-        if cfg.paths.checkpoints.exists():
-            for ckpt in cfg.paths.checkpoints.glob(
-                "step_*.pt"
-            ):
-                try:
-                    ckpt.unlink()
-                except OSError:
-                    pass
-
-    texts = sample_texts(
-        cfg.paths.dataset
-    )
+    texts = sample_texts(cfg.paths.dataset)
 
     tok = Tokenizer()
-
-    tok.train(
-        texts,
-        cfg.model.vocab_size,
-    )
-
+    tok.train(texts, cfg.model.vocab_size)
     tok.save(tok_path)
 
-    fp_path.write_text(
-        current_fp
+    tok_path.with_suffix(".fingerprint").write_text(
+        dataset_fingerprint(cfg.paths.dataset)
     )
 
     console.print(
-        f"[green]"
-        f"Tokenizer ready. "
-        f"vocab={tok.vocab_size:,}"
-        f"[/green]"
+        f"[green]Tokenizer ready. vocab={tok.vocab_size:,}[/green]"
     )
 
     return tok
@@ -914,9 +897,11 @@ def save_checkpoint(
         model_to_save.state_dict()
     )
 
+    finite = state_is_finite(model_state)
+
     if not finite:
-        finite = state_is_finite(
-            model_state
+        raise RuntimeError(
+            f"Refusing to save step {step}: model contains NaN/Inf weights."
         )
 
     payload = {
@@ -1324,6 +1309,7 @@ def train(
             len(dataset) - val_size,
             val_size,
         ],
+        generator=torch.Generator().manual_seed(1234),
     )
 
     # --------------------------------------------------------
@@ -1340,6 +1326,8 @@ def train(
     model.to(device)
 
     if is_distributed():
+        if device.type == "mps":
+            raise RuntimeError("Distributed training is not supported on MPS.")
         init_distributed()
         model = wrap_model(model, device)
 
@@ -1588,227 +1576,109 @@ def train(
         # MAIN LOOP
         # ----------------------------------------------------
 
+        consecutive_skips = 0
+        loss_value = 0.0
+
         while step < max_steps:
 
             try:
-                x, y = next(
-                    data_iter
-                )
-
+                x, y = next(data_iter)
             except StopIteration:
-                data_iter = iter(
-                    train_loader
-                )
+                data_iter = iter(train_loader)
+                x, y = next(data_iter)
 
-                x, y = next(
-                    data_iter
-                )
+            x, y = move_batch(x, y, device)
 
-            x, y = move_batch(
-                x,
-                y,
-                device,
-            )
-
-            tokens_seen += int(
-                x.numel()
-            )
-
-            # ------------------------------------------------
-            # FORWARD
-            # ------------------------------------------------
+            tokens_seen += int(x.numel())
 
             try:
-                with get_autocast_context(
-                    device
-                ):
-                    _, loss = model(
-                        x,
-                        y,
-                    )
+                with get_autocast_context(device):
+                    _, loss = model(x, y)
 
             except RuntimeError as exc:
-
                 if (
                     device.type == "cuda"
-                    and "out of memory"
-                    in str(exc).lower()
+                    and "out of memory" in str(exc).lower()
                 ):
-                    optimizer.zero_grad(
-                        set_to_none=True
-                    )
-
+                    optimizer.zero_grad(set_to_none=True)
                     torch.cuda.empty_cache()
-
                     raise RuntimeError(
                         "CUDA ran out of memory. "
                         "Reduce train.batch_size."
                     ) from exc
-
                 raise
 
-            # ------------------------------------------------
-            # NAN / INF PROTECTION
-            # ------------------------------------------------
-
-            # MPS: keep the training path asynchronous.
-            # Only synchronize for numerical validation periodically.
-            loss_invalid = False
-            if step % 100 == 0:
-                loss_invalid = not bool(
-                    torch.isfinite(loss.detach()).all().cpu().item()
-                )
-
-            if loss_invalid:
-                skipped += 1
-
-                optimizer.zero_grad(
-                    set_to_none=True
-                )
-
-                accumulation_counter = 0
-
-                progress.update(
-                    task,
-                    skipped=skipped,
-                )
-
-                continue
-
-            # ------------------------------------------------
-            # BACKWARD
-            # ------------------------------------------------
-
-            (
-                loss / grad_accum
-            ).backward()
+            (loss / grad_accum).backward()
 
             accumulation_counter += 1
 
-            # ------------------------------------------------
-            # OPTIMIZER
-            # ------------------------------------------------
+            if accumulation_counter < grad_accum:
+                continue
 
-            if (
-                accumulation_counter
-                >= grad_accum
-            ):
+            accumulation_counter = 0
 
-                grad_norm = (
-                    torch.nn.utils.clip_grad_norm_(
-                        model.parameters(),
-                        grad_clip,
+            grad_norm = torch.nn.utils.clip_grad_norm_(
+                model.parameters(),
+                grad_clip,
+            )
+
+            if not bool(torch.isfinite(grad_norm.detach()).all().cpu().item()):
+                skipped += 1
+                consecutive_skips += 1
+                optimizer.zero_grad(set_to_none=True)
+                progress.update(task, skipped=skipped)
+                if consecutive_skips >= 50:
+                    raise RuntimeError(
+                        "50 consecutive non-finite gradient steps. "
+                        "Weights are likely corrupted; restore an earlier checkpoint."
                     )
-                )
+                continue
 
-                # MPS: only synchronize for gradient validation periodically.
-                grad_invalid = False
-                if step % 100 == 0:
-                    grad_invalid = not bool(
-                        torch.isfinite(grad_norm.detach()).all().cpu().item()
-                    )
+            consecutive_skips = 0
 
-                if grad_invalid:
-                    skipped += 1
+            apply_lr(step)
 
-                    optimizer.zero_grad(
-                        set_to_none=True
-                    )
+            optimizer.step()
 
-                    accumulation_counter = 0
-
-                    progress.update(
-                        task,
-                        skipped=skipped,
-                    )
-
-                    continue
-
-                apply_lr(step)
-
-                optimizer.step()
-
-                optimizer.zero_grad(
-                    set_to_none=True
-                )
-
-                accumulation_counter = 0
-
-            # ------------------------------------------------
-            # STEP
-            # ------------------------------------------------
+            optimizer.zero_grad(set_to_none=True)
 
             step += 1
 
-            elapsed = max(
-                time.perf_counter()
-                - training_start,
-                1e-9,
-            )
+            elapsed = max(time.perf_counter() - training_start, 1e-9)
 
-            tokens_per_sec = (
-                tokens_seen
-                / elapsed
-            )
+            tokens_per_sec = tokens_seen / elapsed
+
+            steps_per_min = ((step - start_step) / elapsed) * 60
 
             _check_key()
+
             pct = (step / max_steps) * 100 if max_steps else 0.0
-            # Do not pull a scalar from MPS every step.
-            # Sample the loss only every 100 steps.
-            loss_value = float(
-                    loss.detach().cpu().item()
-                )
 
-
-            if step % 10 == 0:
-                loss_value = float(
-                    loss.detach().cpu().item()
-                )
+            if step == start_step + 1 or step % 10 == 0:
+                loss_value = float(loss.detach().cpu().item())
 
             if _compact["on"]:
                 extra_text = f"{pct:.1f}%"
-            elif loss_value is None:
-                extra_text = (
-                    f"loss={loss_value} "
-                    f"skipped={skipped} "
-                    f"tok/s={tokens_per_sec:.0f} "
-                    f"steps/min={(step / elapsed) * 60:.1f} "
-                    f"{pct:.1f}%"
-                )
             else:
                 extra_text = (
                     f"loss={loss_value:.4f} "
                     f"skipped={skipped} "
                     f"tok/s={tokens_per_sec:.0f} "
-                    f"steps/min={(step / elapsed) * 60:.1f} "
+                    f"steps/min={steps_per_min:.1f} "
                     f"{pct:.1f}%"
                 )
 
-            progress_kwargs = {
-                "completed": step,
-                "skipped": skipped,
-                "tokens_per_sec": tokens_per_sec,
-                "steps_per_min": (step / elapsed) * 60,
-                "extra": extra_text,
-            }
-
-            if loss_value is not None:
-                progress_kwargs["loss"] = loss_value
-
             progress.update(
                 task,
-                **progress_kwargs,
+                completed=step,
+                skipped=skipped,
+                tokens_per_sec=tokens_per_sec,
+                steps_per_min=steps_per_min,
+                extra=extra_text,
+                loss=loss_value,
             )
 
-            # ------------------------------------------------
-            # CHECKPOINT & AUTOUPLOAD
-            # ------------------------------------------------
-
-            if (
-                step
-                % checkpoint_every
-                == 0
-            ):
+            if step % checkpoint_every == 0:
                 ckpt_path = save_checkpoint(
                     cfg,
                     model,
@@ -1816,6 +1686,7 @@ def train(
                     step,
                     finite=True,
                 )
+
                 if step % upload_every == 0:
                     upload_to_huggingface(
                         cfg=cfg,
@@ -1824,21 +1695,8 @@ def train(
                         step=step,
                     )
 
-            # ------------------------------------------------
-            # EVALUATION
-            # ------------------------------------------------
-
-            if (
-                step
-                % eval_every
-                == 0
-            ):
-
-                val_loss = evaluate(
-                    model,
-                    val_loader,
-                    device,
-                )
+            if step % eval_every == 0:
+                val_loss = evaluate(model, val_loader, device)
 
                 console.print(
                     f"[yellow]"
@@ -1849,29 +1707,6 @@ def train(
                 )
 
                 model.train()
-
-        # ----------------------------------------------------
-        # FLUSH PARTIAL GRADIENTS
-        # ----------------------------------------------------
-
-        if accumulation_counter > 0:
-
-            grad_norm = (
-                torch.nn.utils.clip_grad_norm_(
-                    model.parameters(),
-                    grad_clip,
-                )
-            )
-
-            # Partial-gradient flush happens only at the end.
-            # Avoid an MPS scalar synchronization here; step the optimizer.
-            apply_lr(step)
-
-            optimizer.step()
-
-            optimizer.zero_grad(
-                set_to_none=True
-            )
 
     # --------------------------------------------------------
     # FINAL CHECKPOINT & AUTOUPLOAD
@@ -1932,9 +1767,7 @@ def evaluate(
 
     model.eval()
 
-    # The complete validation set is ~216k examples.
-    # With batch size 4 that can be ~54k forward passes.
-    # That is far too expensive to run every 250 training steps.
+    # Fixed subset of the validation set keeps periodic evaluation cheap.
     max_batches = 200
 
     total_loss = torch.zeros(

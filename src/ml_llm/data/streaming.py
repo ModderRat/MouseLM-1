@@ -3,15 +3,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 
 import numpy as np
+
+from ml_llm.data.tokenizer import strip_specials
 
 
 def _format_turns(turns: list[dict]) -> str | None:
     parts = []
     for turn in turns:
-        content = turn.get("content", "").strip()
+        content = strip_specials(turn.get("content") or "").strip()
         if not content:
             continue
         role = "<user>" if turn.get("role") == "user" else "<assistant>"
@@ -21,38 +24,54 @@ def _format_turns(turns: list[dict]) -> str | None:
     return "<bos> " + " ".join(parts) + " <eos>"
 
 
-def sample_texts(dataset_dir: Path, *, limit: int = 50_000) -> list[str]:
+def sample_texts(dataset_dir: Path, *, limit: int = 50_000, seed: int = 0) -> list[str]:
     if not dataset_dir.exists():
         return []
 
-    texts = []
+    files = sorted(dataset_dir.glob("*.jsonl"))
+    if not files:
+        return []
 
-    for jsonl_path in sorted(dataset_dir.glob("*.jsonl")):
-        with jsonl_path.open() as fh:
+    per_file = max(1, limit // len(files)) if limit else None
+    rng = random.Random(seed)
+    texts: list[str] = []
+
+    for jsonl_path in files:
+        reservoir: list[str] = []
+        seen = 0
+        with jsonl_path.open(encoding="utf-8") as fh:
             for line in fh:
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
+                if not line.strip():
                     continue
+                seen += 1
+                if per_file is None or len(reservoir) < per_file:
+                    reservoir.append(line)
+                else:
+                    j = rng.randrange(seen)
+                    if j < per_file:
+                        reservoir[j] = line
 
-                formatted = _format_turns(row.get("turns") or [])
-                if formatted:
-                    texts.append(formatted)
+        for line in reservoir:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            formatted = _format_turns(row.get("turns") or [])
+            if formatted:
+                texts.append(formatted)
 
-                if limit and len(texts) >= limit:
-                    break
-
-    return texts[:limit]
+    return texts
 
 
 def _meta_path(cache_path: Path) -> Path:
     return cache_path.with_suffix(cache_path.suffix + ".meta.json")
 
 
-def _dataset_signature(dataset_dir: Path, context_len: int) -> str:
+def _dataset_signature(dataset_dir: Path, context_len: int, tokenizer_fp: str) -> str:
     h = hashlib.sha256()
     h.update(str(context_len).encode())
-    h.update(b"fmt3")
+    h.update(b"fmt4")
+    h.update(tokenizer_fp.encode())
     for jsonl_path in sorted(dataset_dir.glob("*.jsonl")):
         stat = jsonl_path.stat()
         h.update(jsonl_path.name.encode())
@@ -70,7 +89,7 @@ def build_examples_cache(
     max_examples: int | None = None,
     force: bool = False,
 ) -> int:
-    signature = _dataset_signature(dataset_dir, context_len)
+    signature = _dataset_signature(dataset_dir, context_len, tokenizer.fingerprint())
     meta_file = _meta_path(cache_path)
 
     if not force and cache_path.exists() and meta_file.exists():
@@ -87,6 +106,7 @@ def build_examples_cache(
     token_limit = max_examples * context_len if max_examples else None
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_file.unlink(missing_ok=True)
 
     total_tokens = 0
     seen = 0
@@ -98,7 +118,7 @@ def build_examples_cache(
             if done:
                 break
             print(f"Encoding: {jsonl_path.name}", flush=True)
-            with jsonl_path.open() as fh:
+            with jsonl_path.open(encoding="utf-8") as fh:
                 for line in fh:
                     seen += 1
                     if seen % 5000 == 0:

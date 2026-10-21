@@ -9,6 +9,9 @@ dependencies = [
     "numpy>=1.26",
 ]
 
+[project.optional-dependencies]
+data = ["datasets", "pyyaml", "chatterbot-corpus", "huggingface_hub"]
+
 [project.scripts]
 ml-llm = "ml_llm.cli:main"
 

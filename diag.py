@@ -12,8 +12,8 @@ tok = build_tokenizer(cfg)
 model, step, _ = load_model(cfg, tok)
 model.eval()
 
-path = cfg.paths.dataset / "dailydialog.jsonl"
-rows = [json.loads(l) for l in path.read_text().splitlines()[:2000] if l.strip()]
+path = sorted(cfg.paths.dataset.glob("*.jsonl"))[0]
+rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()[:2000] if l.strip()]
 random.seed(0)
 random.shuffle(rows)
 
@@ -30,7 +30,7 @@ for row in rows[:50]:
     losses.append(loss.item())
 print("teacher-forced loss:", sum(losses) / len(losses), "n=", len(losses))
 
-ids = tok.encode("<bos> <user> hello <assistant> ")
+ids = tok.encode("<bos> <user> hello <assistant>")
 print("prompt tokens:", [tok.id_to_token[i] for i in ids])
 with torch.no_grad():
     logits, _ = model(torch.tensor([ids], dtype=torch.long))

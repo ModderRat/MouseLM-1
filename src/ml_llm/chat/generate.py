@@ -23,14 +23,14 @@ def build_prompt(memory, user_input: str, max_turns: int = 2) -> str:
 
 def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temperature=0.7, top_k=40, top_p=0.9, repetition_penalty=1.15, history_turns=2):
     model.eval()
-    context = getattr(getattr(model, "config", None), "context", 1024)
+    cfg = getattr(model, "cfg", None) or getattr(getattr(model, "_orig_mod", None), "cfg", None)
+    context = getattr(cfg, "context", 1024)
     prompt_ids = tokenizer.encode(build_prompt(memory, user_input, history_turns))
     input_ids = torch.tensor([prompt_ids], dtype=torch.long, device=device)
 
     t2i = tokenizer.token_to_id
     stop_ids = {t2i[t] for t in ("<eos>", "<user>") if t in t2i}
     block = {t2i[t] for t in ("<unk>", "<pad>", "<bos>", "<assistant>") if t in t2i}
-    block |= {i for t, i in t2i.items() if len(t) == 1 and t.isalnum() and t not in "aAI"}
     block_ids = sorted(block)
     penalty_ids = {i for t, i in t2i.items() if len(t) > 1 and any(c.isalpha() for c in t) and t not in SPECIAL}
     generated = []
@@ -72,5 +72,6 @@ def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temp
 
     text = clean_generated_text(tokenizer.decode(generated))
     memory.add("user", user_input)
-    memory.add("assistant", text)
+    if text:
+        memory.add("assistant", text)
     return text

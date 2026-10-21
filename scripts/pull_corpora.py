@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -24,7 +25,7 @@ def from_chatterbot_corpus() -> list[list[dict]]:
 
 
 def main() -> None:
-    out_path = Path.home() / ".ml_llm" / "dataset" / "corpora.jsonl"
+    out_path = Path(os.environ.get("ML_LLM_ROOT", str(Path.home() / "ml_llm_pi"))) / "dataset" / "corpora.jsonl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     data = from_chatterbot_corpus()

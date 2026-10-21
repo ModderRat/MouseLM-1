@@ -202,7 +202,7 @@ def main() -> None:
     chat_parser = sub.add_parser("chat")
     chat_parser.add_argument("--temperature", type=float, default=0.6)
     chat_parser.add_argument("--top-k", type=int, default=40)
-    chat_parser.add_argument("--repetition-penalty", type=float, default=1.3)
+    chat_parser.add_argument("--repetition-penalty", type=float, default=1.15)
 
     args = parser.parse_args()
     cfg = Config.default()
