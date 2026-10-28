@@ -1196,6 +1196,8 @@ def get_autocast_context(
         except Exception:
             pass
 
+    if device.type == "mps":
+        return torch.autocast(device_type="mps", dtype=torch.bfloat16)
     return contextlib.nullcontext()
 
 

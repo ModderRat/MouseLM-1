@@ -21,8 +21,8 @@ class ModelConfig:
 
 @dataclass
 class TrainConfig:
-    batch_size: int = 1
-    grad_accum: int = 8
+    batch_size: int = 8
+    grad_accum: int = 1
     lr: float = 3e-4
     weight_decay: float = 0.01
     warmup_steps: int = 500
