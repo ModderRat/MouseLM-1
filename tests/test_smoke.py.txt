@@ -1,0 +1,10 @@
+def test_ml_llm_package_imports():
+    import ml_llm
+
+    assert ml_llm is not None
+
+
+def test_config_module_imports():
+    from ml_llm import config
+
+    assert config is not None
