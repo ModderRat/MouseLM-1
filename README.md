@@ -1,4 +1,4 @@
-'''# ml-llm v7 — MouseLM-1
+# ml-llm v7 — MouseLM-1
 
 A tiny GPT trainer and chat tool designed for local machines, including Raspberry Pi and Apple Silicon Macs.
 
@@ -44,4 +44,3 @@ Steps counted by the trainer are optimizer updates (one per `grad_accum` micro-b
 The default model configuration is defined in `src/ml_llm/config.py`. Increase context length or model dimensions only after checking available memory.
 
 Changing the tokenizer invalidates existing checkpoints. To start fresh after changing it, remove `tokenizer.json`, `tokenizer.fingerprint`, `examples_cache.bin`, and the checkpoints folder.
-'''
