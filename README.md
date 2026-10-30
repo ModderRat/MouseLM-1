@@ -1,31 +1,47 @@
-<<<<<<< HEAD
-ml-llm v7 (MouseLM-1)
-=======
-ml-llm v7 — macOS build
->>>>>>> ec97c23a749936183d772472a77460210dc863e3
+'''# ml-llm v7 — MouseLM-1
 
-Install:
-  python3 -m venv .venv
-  source .venv/bin/activate
-  pip install -e .
-  pip install -e ".[data]"
+A tiny GPT trainer and chat tool designed for local machines, including Raspberry Pi and Apple Silicon Macs.
 
-Root folder: set ML_LLM_ROOT to the project folder (default ~/ml_llm_pi).
-Checkpoints, tokenizer.json, examples_cache.bin, memory.jsonl and logs live there.
-Put *.jsonl training files in $ML_LLM_ROOT/dataset.
-  format per line: {"turns": [{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]}
-Optional $ML_LLM_ROOT/config.json overrides model size (dim, n_heads, n_layers, context, dropout, vocab_size, n_loops).
+## Install
 
-Commands:
-  ml-llm train
-  ml-llm chat
-  ml-llm status
-  ml-llm healthcheck
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+python -m pip install -e ".[data]"
+```
 
-<<<<<<< HEAD
-Steps counted in train are optimizer updates (one per grad_accum micro-batches).
-Changing the tokenizer invalidates checkpoints: delete tokenizer.json, tokenizer.fingerprint, examples_cache.bin and the checkpoints folder to start fresh.
-=======
-Config defaults (src/ml_llm/config.py): 192 dim, 4 heads, 6 layers, 256 context, fp32, batch 6 x grad_accum 4.
-Increase context/dim only after confirming RAM headroom with healthcheck.
->>>>>>> ec97c23a749936183d772472a77460210dc863e3
+## Runtime files
+
+The project root is controlled by `ML_LLM_ROOT` and defaults to `~/ml_llm_pi`.
+
+Checkpoints, `tokenizer.json`, `examples_cache.bin`, `memory.jsonl`, and logs are stored under that root. Put `*.jsonl` training files in `$ML_LLM_ROOT/dataset`.
+
+Each JSONL line should contain conversation turns:
+
+```json
+{"turns": [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi!"}]}
+```
+
+An optional `config.json` can override model settings such as `dim`, `n_heads`, `n_layers`, `context`, `dropout`, `vocab_size`, and `n_loops`.
+
+## Commands
+
+```bash
+ml-llm train
+ml-llm chat
+ml-llm status
+ml-llm healthcheck
+ml-llm upload
+ml-llm debugzip
+```
+
+## Training notes
+
+Steps counted by the trainer are optimizer updates (one per `grad_accum` micro-batches).
+
+The default model configuration is defined in `src/ml_llm/config.py`. Increase context length or model dimensions only after checking available memory.
+
+Changing the tokenizer invalidates existing checkpoints. To start fresh after changing it, remove `tokenizer.json`, `tokenizer.fingerprint`, `examples_cache.bin`, and the checkpoints folder.
+'''
