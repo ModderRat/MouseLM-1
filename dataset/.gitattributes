@@ -1,0 +1,7 @@
+dailydialog.jsonl filter=lfs diff=lfs merge=lfs -text
+lamini_filtered.jsonl filter=lfs diff=lfs merge=lfs -text
+personachat_converted.jsonl filter=lfs diff=lfs merge=lfs -text
+sharegpt_filtered.jsonl filter=lfs diff=lfs merge=lfs -text
+wildchat_filtered.jsonl filter=lfs diff=lfs merge=lfs -text
+cornell_converted.jsonl filter=lfs diff=lfs merge=lfs -text
+corpora.jsonl filter=lfs diff=lfs merge=lfs -text

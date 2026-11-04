@@ -10,6 +10,17 @@ import numpy as np
 
 from ml_llm.data.tokenizer import strip_specials
 
+FILE_WEIGHTS = {
+    "personachat_converted": 4,
+    "cornell_converted": 3,
+    "dailydialog": 3,
+    "wildchat_filtered": 2,
+    "sharegpt_filtered": 1,
+    "corpora": 1,
+    "lamini_filtered": 1,
+}
+FILE_CAPS = {"lamini_filtered": 150_000}
+
 
 def _format_turns(turns: list[dict]) -> str | None:
     parts = []
@@ -70,7 +81,8 @@ def _meta_path(cache_path: Path) -> Path:
 def _dataset_signature(dataset_dir: Path, context_len: int, tokenizer_fp: str) -> str:
     h = hashlib.sha256()
     h.update(str(context_len).encode())
-    h.update(b"fmt4")
+    h.update(b"fmt5")
+    h.update(json.dumps([FILE_WEIGHTS, FILE_CAPS], sort_keys=True).encode())
     h.update(tokenizer_fp.encode())
     for jsonl_path in sorted(dataset_dir.glob("*.jsonl")):
         stat = jsonl_path.stat()
@@ -78,6 +90,31 @@ def _dataset_signature(dataset_dir: Path, context_len: int, tokenizer_fp: str) -
         h.update(str(stat.st_size).encode())
         h.update(str(int(stat.st_mtime)).encode())
     return h.hexdigest()
+
+
+def _interleaved_lines(dataset_dir: Path):
+    files = sorted(dataset_dir.glob("*.jsonl"))
+    handles = {p: p.open(encoding="utf-8") for p in files}
+    counts = {p: 0 for p in files}
+    live = list(files)
+    try:
+        while live:
+            for p in list(live):
+                weight = FILE_WEIGHTS.get(p.stem, 1)
+                cap = FILE_CAPS.get(p.stem)
+                for _ in range(weight):
+                    if cap is not None and counts[p] >= cap:
+                        live.remove(p)
+                        break
+                    line = handles[p].readline()
+                    if not line:
+                        live.remove(p)
+                        break
+                    counts[p] += 1
+                    yield line
+    finally:
+        for handle in handles.values():
+            handle.close()
 
 
 def build_examples_cache(
@@ -111,37 +148,31 @@ def build_examples_cache(
     total_tokens = 0
     seen = 0
     buffer: list[int] = []
-    done = False
 
     with open(cache_path, "wb", buffering=1024 * 1024) as out_fh:
-        for jsonl_path in sorted(dataset_dir.glob("*.jsonl")):
-            if done:
+        print("Encoding interleaved dataset", flush=True)
+        for line in _interleaved_lines(dataset_dir):
+            seen += 1
+            if seen % 20000 == 0:
+                print(f"  {seen:,} lines, {total_tokens:,} tokens", flush=True)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            formatted = _format_turns(row.get("turns") or [])
+            if not formatted:
+                continue
+
+            buffer.extend(tokenizer.encode(formatted))
+
+            if len(buffer) >= 1_000_000:
+                out_fh.write(np.asarray(buffer, dtype=dtype).tobytes())
+                total_tokens += len(buffer)
+                buffer = []
+
+            if token_limit and total_tokens >= token_limit:
                 break
-            print(f"Encoding: {jsonl_path.name}", flush=True)
-            with jsonl_path.open(encoding="utf-8") as fh:
-                for line in fh:
-                    seen += 1
-                    if seen % 5000 == 0:
-                        print(f"  {seen:,} lines, {total_tokens:,} tokens", flush=True)
-                    try:
-                        row = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-
-                    formatted = _format_turns(row.get("turns") or [])
-                    if not formatted:
-                        continue
-
-                    buffer.extend(tokenizer.encode(formatted))
-
-                    if len(buffer) >= 1_000_000:
-                        out_fh.write(np.asarray(buffer, dtype=dtype).tobytes())
-                        total_tokens += len(buffer)
-                        buffer = []
-
-                    if token_limit and total_tokens >= token_limit:
-                        done = True
-                        break
 
         if buffer:
             out_fh.write(np.asarray(buffer, dtype=dtype).tobytes())

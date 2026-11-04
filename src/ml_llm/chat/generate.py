@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from collections import Counter
 
 SPECIAL = ["<bos>", "<eos>", "<user>", "<assistant>", "<pad>", "<unk>"]
 
@@ -8,6 +9,40 @@ def clean_generated_text(text: str) -> str:
     for token in SPECIAL:
         text = text.replace(token, "")
     return " ".join(text.split())
+
+
+def collapse_repeats(text: str) -> str:
+    out = []
+    for w in text.split():
+        if out and w.lower() == out[-1].lower():
+            continue
+        out.append(w)
+    return " ".join(out)
+
+
+def trim_to_sentence(text: str) -> str:
+    cut = max(text.rfind("."), text.rfind("?"), text.rfind("!"))
+    if cut >= 8:
+        return text[: cut + 1]
+    return text
+
+
+def is_degenerate(text: str) -> bool:
+    words = text.lower().split()
+    if len(words) < 4:
+        return False
+    return len(set(words)) / len(words) < 0.55
+
+
+def banned_ngram(generated, n):
+    if n < 2 or len(generated) < n - 1:
+        return set()
+    prefix = tuple(generated[-(n - 1):])
+    banned = set()
+    for i in range(len(generated) - n + 1):
+        if tuple(generated[i:i + n - 1]) == prefix:
+            banned.add(generated[i + n - 1])
+    return banned
 
 
 def build_prompt(memory, user_input: str, max_turns: int = 2) -> str:
@@ -21,7 +56,9 @@ def build_prompt(memory, user_input: str, max_turns: int = 2) -> str:
     return "<bos> " + " ".join(parts)
 
 
-def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temperature=0.7, top_k=40, top_p=0.9, repetition_penalty=1.15, history_turns=2):
+def reply(model, tokenizer, memory, user_input, device, max_new_tokens=60, temperature=0.7, top_k=40, top_p=0.9, repetition_penalty=1.3, history_turns=2, no_repeat_ngram=3):
+    if not user_input.strip():
+        return ""
     model.eval()
     cfg = getattr(model, "cfg", None) or getattr(getattr(model, "_orig_mod", None), "cfg", None)
     context = getattr(cfg, "context", 1024)
@@ -34,6 +71,7 @@ def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temp
     block_ids = sorted(block)
     penalty_ids = {i for t, i in t2i.items() if len(t) > 1 and any(c.isalpha() for c in t) and t not in SPECIAL}
     generated = []
+    stopped = False
 
     with torch.no_grad():
         for _ in range(max_new_tokens):
@@ -43,11 +81,19 @@ def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temp
 
             logits[:, block_ids] = -float("inf")
 
-            pen = sorted(set(generated) & penalty_ids)
-            if repetition_penalty != 1.0 and pen:
-                idx = torch.tensor(pen, device=logits.device)
-                vals = logits[0, idx]
-                logits[0, idx] = torch.where(vals < 0, vals * repetition_penalty, vals / repetition_penalty)
+            if repetition_penalty != 1.0 and generated:
+                counts = Counter(t for t in generated if t in penalty_ids)
+                for tid, c in counts.items():
+                    factor = repetition_penalty ** min(c, 3)
+                    v = logits[0, tid]
+                    logits[0, tid] = v * factor if v < 0 else v / factor
+
+            if generated and generated[-1] in penalty_ids:
+                logits[0, generated[-1]] = -float("inf")
+
+            bans = banned_ngram(generated, no_repeat_ngram)
+            if bans:
+                logits[0, sorted(bans)] = -float("inf")
 
             if top_k and top_k > 0:
                 v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
@@ -66,12 +112,15 @@ def reply(model, tokenizer, memory, user_input, device, max_new_tokens=150, temp
 
             tid = next_token.item()
             if tid in stop_ids:
+                stopped = True
                 break
             generated.append(tid)
             input_ids = torch.cat((input_ids, next_token), dim=1)
 
-    text = clean_generated_text(tokenizer.decode(generated))
-    memory.add("user", user_input)
-    if text:
+    text = collapse_repeats(clean_generated_text(tokenizer.decode(generated)))
+    if not stopped:
+        text = trim_to_sentence(text)
+    if text and not is_degenerate(text):
+        memory.add("user", user_input)
         memory.add("assistant", text)
     return text
