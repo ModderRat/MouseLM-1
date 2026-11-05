@@ -1,0 +1,37 @@
+MouseLM-1 Acknowledgments and Licenses
+
+MouseLM-1 was trained on the following datasets. Thank you to every
+author, annotator, and contributor who made them available.
+
+Cornell Movie-Dialogs Corpus
+  Cristian Danescu-Niculescu-Mizil and Lillian Lee (Cornell University, 2011)
+  Used under the terms of the original distribution (research use).
+
+PersonaChat
+  Zhang et al., "Personalizing Dialogue Agents: I have a dog, do you have pets too?" (Facebook AI Research, 2018)
+  Used under the terms of the original distribution.
+
+DailyDialog
+  Li et al., "DailyDialog: A Manually Labelled Multi-turn Dialogue Dataset" (2017)
+  License: CC BY-NC-SA 4.0 (non-commercial, share-alike).
+
+LaMini-instruction
+  Wu et al., "LaMini-LM" (MBZUAI, 2023)
+  License: CC BY-NC 4.0 (non-commercial).
+
+WildChat
+  Zhao et al., "WildChat: 1M ChatGPT Interaction Logs in the Wild" (Allen Institute for AI, 2024)
+  License: ODC-BY 1.0 (attribution required).
+
+ShareGPT
+  User-shared conversations collected from ShareGPT.
+  No formal license; content is subject to the terms of the services it came from.
+
+ChatterBot Corpus (corpora.jsonl)
+  Gunther Cox and contributors
+  License: BSD 3-Clause (attribution required, keep the copyright notice).
+
+All datasets remain the property of their respective authors and are
+used under the licenses above. MouseLM-1 is intended for non-commercial,
+research and hobby use only. Dataset copyright and license terms apply
+to the data itself and not to the MouseLM-1 code.
