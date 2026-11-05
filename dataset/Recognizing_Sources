@@ -12,24 +12,90 @@ PersonaChat
   Used under the terms of the original distribution.
 
 DailyDialog
-  Li et al., "DailyDialog: A Manually Labelled Multi-turn Dialogue Dataset" (2017)
-  License: CC BY-NC-SA 4.0 (non-commercial, share-alike).
+  Li, Su, Niu, Cao, Shen, "DailyDialog: A Manually Labelled Multi-turn Dialogue Dataset" (IJCNLP 2017)
+  Obtained via the GitHub mirror github.com/IroTyrokomaki/daily_dialog (Iro Tyrokomaki).
+  License: CC BY-NC-SA 4.0 (attribution required, non-commercial, share-alike).
+  Research use only.
+  https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 LaMini-instruction
-  Wu et al., "LaMini-LM" (MBZUAI, 2023)
-  License: CC BY-NC 4.0 (non-commercial).
+  Wu et al., "LaMini-LM: A Diverse Herd of Distilled Models from Large-Scale Instructions" (MBZUAI, 2023)
+  License: CC BY-NC 4.0 (attribution required, non-commercial use only).
+  https://creativecommons.org/licenses/by-nc/4.0/legalcode
 
 WildChat
-  Zhao et al., "WildChat: 1M ChatGPT Interaction Logs in the Wild" (Allen Institute for AI, 2024)
+  Zhao, Ren, Hessel, Cardie, Choi, Deng (Allen Institute for AI, 2024)
   License: ODC-BY 1.0 (attribution required).
 
+  Zhao, W., Ren, X., Hessel, J., Cardie, C., Choi, Y., Deng, Y.
+  "WildChat: 1M ChatGPT Interaction Logs in the Wild."
+  The Twelfth International Conference on Learning Representations, 2024.
+  https://openreview.net/forum?id=Bl8u7ZRlbM
+
+  Deng, Y., Zhao, W., Hessel, J., Ren, X., Cardie, C., Choi, Y.
+  "WildVis: Open Source Visualizer for Million-Scale Chat Logs in the Wild."
+  Proceedings of the 2024 Conference on Empirical Methods in Natural
+  Language Processing: System Demonstrations, 2024.
+  https://aclanthology.org/2024.emnlp-demo.50/
+
 ShareGPT
-  User-shared conversations collected from ShareGPT.
-  No formal license; content is subject to the terms of the services it came from.
+  User-shared conversations collected via ShareGPT.
+  License: The Unlicense (public domain dedication).
+
+  This is free and unencumbered software released into the public domain.
+
+  Anyone is free to copy, modify, publish, use, compile, sell, or
+  distribute this software, either in source code form or as a compiled
+  binary, for any purpose, commercial or non-commercial, and by any
+  means.
+
+  In jurisdictions that recognize copyright laws, the author or authors
+  of this software dedicate any and all copyright interest in the
+  software to the public domain. We make this dedication for the benefit
+  of the public at large and to the detriment of our heirs and
+  successors. We intend this dedication to be an overt act of
+  relinquishment in perpetuity of all present and future rights to this
+  software under copyright law.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+  IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+  OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+  ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+  OTHER DEALINGS IN THE SOFTWARE.
+
+  For more information, please refer to <https://unlicense.org>
 
 ChatterBot Corpus (corpora.jsonl)
-  Gunther Cox and contributors
-  License: BSD 3-Clause (attribution required, keep the copyright notice).
+  Copyright (c) 2017, Gunther Cox. All rights reserved.
+  License: BSD 3-Clause.
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.
+
+  Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.
+
+  Neither the name of chatterbot nor the names of its contributors may be
+  used to endorse or promote products derived from this software without
+  specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
 
 All datasets remain the property of their respective authors and are
 used under the licenses above. MouseLM-1 is intended for non-commercial,
